@@ -264,7 +264,7 @@ void RandomPlayerbotMgr::UpdateAIInternal(uint32 elapsed, bool /*minimal*/)
             activateCheckPlayersThread();
     }
 
-    if (sPlayerbotAIConfig->randomBotJoinBG && !players.empty())
+    if (sPlayerbotAIConfig->randomBotJoinBG/* && !players.empty()*/)
     {
         if (time(nullptr) > (BgCheckTimer + 30))
             activateCheckBgQueueThread();
@@ -428,7 +428,7 @@ void RandomPlayerbotMgr::LoadBattleMastersCache()
             bmTeam = TEAM_HORDE;
 
         BattleMastersCache[bmTeam][BattlegroundTypeId(bgTypeId)].insert(BattleMastersCache[bmTeam][BattlegroundTypeId(bgTypeId)].end(), entry);
-        LOG_INFO("playerbots", "Cached Battmemaster #{} for BG Type {} ({})", entry, bgTypeId, bmTeam == ALLIANCE ? "Alliance" : bmTeam == HORDE ? "Horde" : "Neutral");
+        LOG_INFO("playerbots", "Cached Battmemaster #{} for BG Type {} ({})", entry, bgTypeId, bmTeam == TEAM_ALLIANCE ? "Alliance" : bmTeam == TEAM_HORDE ? "Horde" : "Neutral");
 
     } while (result->NextRow());
 
@@ -1095,7 +1095,7 @@ void RandomPlayerbotMgr::RandomTeleport(Player* bot, std::vector<WorldLocation>&
 
 void RandomPlayerbotMgr::PrepareTeleportCache()
 {
-    uint32 maxLevel = sPlayerbotAIConfig->randomBotMaxLevel;
+    uint8 maxLevel = sPlayerbotAIConfig->randomBotMaxLevel;
     if (maxLevel > sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL))
         maxLevel = sWorld->getIntConfig(CONFIG_MAX_PLAYER_LEVEL);
 
@@ -1125,13 +1125,13 @@ void RandomPlayerbotMgr::PrepareTeleportCache()
         {
             QueryResult results = WorldDatabase.Query("SELECT map, position_x, position_y, position_z "
                 "FROM (SELECT map, position_x, position_y, position_z, AVG(t.maxlevel), AVG(t.minlevel), {} - (AVG(t.maxlevel) + AVG(t.minlevel)) / 2 delta "
-                "FROM creature c INNER JOIN creature_template t ON c.id1 = t.entry WHERE t.npcflag = 0 AND t.lootid != 0 AND t.unit_flags != 768 GROUP BY t.entry HAVING COUNT(*) > 1) q "
+                "FROM creature c INNER JOIN creature_template t ON c.id1 = t.entry WHERE t.npcflag = 0 AND t.lootid != 0 AND t.unit_flags != 768 GROUP BY t.entry, map, position_x, position_y, position_z HAVING COUNT(*) > 1) q "
                 "WHERE delta >= 0 AND delta <= {} AND map IN ('{}') AND NOT EXISTS (SELECT map, position_x, position_y, position_z FROM "
                 "(SELECT map, c.position_x, c.position_y, c.position_z, AVG(t.maxlevel), AVG(t.minlevel), {} - (AVG(t.maxlevel) + AVG(t.minlevel)) / 2 delta "
-                "FROM creature c INNER JOIN creature_template t ON c.id1 = t.entry WHERE t.npcflag = 0 AND t.lootid != 0 GROUP BY t.entry) q1 WHERE abs(delta) > {} and q1.map = q.map AND SQRT("
+                "FROM creature c INNER JOIN creature_template t ON c.id1 = t.entry WHERE t.npcflag = 0 AND t.lootid != 0 GROUP BY t.entry, map, position_x, position_y, position_z) q1 WHERE abs(delta) > {} and q1.map = q.map AND SQRT("
                 "(q1.position_x - q.position_x) * (q1.position_x - q.position_x) + (q1.position_y - q.position_y) * (q1.position_y - q.position_y) + "
                 "(q1.position_z - q.position_z) * (q1.position_z - q.position_z)) < {})", level, sPlayerbotAIConfig->randomBotTeleLevel, sPlayerbotAIConfig->randomBotMapsAsString.c_str(),
-                level, sPlayerbotAIConfig->randomBotTeleLevel, (uint32)sPlayerbotAIConfig->sightDistance);
+                level, sPlayerbotAIConfig->randomBotTeleLevel, (uint32) sPlayerbotAIConfig->sightDistance);
             if (results)
             {
                 do
@@ -1403,7 +1403,12 @@ bool RandomPlayerbotMgr::IsRandomBot(Player* bot)
             return false;
     }
     if (bot)
-        return IsRandomBot(bot->GetGUID().GetCounter()) || sPlayerbotAIConfig->IsInRandomAccountList(bot->GetSession()->GetAccountId());
+    {
+        if (sPlayerbotAIConfig->IsInRandomAccountList(bot->GetSession()->GetAccountId()))
+            return true;
+
+        return IsRandomBot(bot->GetGUID().GetCounter());
+    }
 
     return false;
 }
@@ -1411,7 +1416,10 @@ bool RandomPlayerbotMgr::IsRandomBot(Player* bot)
 bool RandomPlayerbotMgr::IsRandomBot(ObjectGuid::LowType bot)
 {
     ObjectGuid guid = ObjectGuid::Create<HighGuid::Player>(bot);
-    return GetEventValue(bot, "add") || sPlayerbotAIConfig->IsInRandomAccountList(sCharacterCache->GetCharacterAccountIdByGuid(guid));
+    if (sPlayerbotAIConfig->IsInRandomAccountList(sCharacterCache->GetCharacterAccountIdByGuid(guid)))
+        return true;
+
+    return GetEventValue(bot, "add");
 }
 
 std::list<uint32> RandomPlayerbotMgr::GetBots()
