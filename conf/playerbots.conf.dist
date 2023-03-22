@@ -4,7 +4,7 @@
 
 # Enable or disable AI Playerbot
 AiPlayerbot.Enabled = 1
-
+AiPlayerbot.VerifiedBuild = 12340
 # Enable random bot system
 AiPlayerbot.RandomBotAutologin = 1
 
